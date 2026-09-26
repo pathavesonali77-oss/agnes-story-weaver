@@ -4,6 +4,7 @@ import {
   cleanNovelText,
   extractEpisodePlan,
   findNovelQualityProblems,
+  hasOnlySoftProblems,
 } from "./novel-quality";
 
 export type LangCode = "en" | "hi" | "mr";
@@ -164,10 +165,15 @@ export const generateEpisodePart = createServerFn({ method: "POST" })
     let text = cleanNovelText(await createDraft());
     let problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart, data.part === 1);
     if (problems.length) {
-      text = cleanNovelText(await createDraft(problems.join(", ")));
-      problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart, data.part === 1);
+      const retryText = cleanNovelText(await createDraft(problems.join(", ")));
+      const retryProblems = findNovelQualityProblems(retryText, data.lang, data.wordsPerPart, data.part === 1);
+      // Keep whichever draft is cleaner.
+      if (retryProblems.length <= problems.length) {
+        text = retryText;
+        problems = retryProblems;
+      }
     }
-    if (problems.length) {
+    if (problems.length && !hasOnlySoftProblems(problems)) {
       throw new Error(`The writing quality check rejected this part: ${problems.join(", ")}. Please retry this language.`);
     }
 
