@@ -27,18 +27,20 @@ function normalizedParagraphs(text: string): string[] {
     .filter((paragraph) => paragraph.length >= 35);
 }
 
-function hasPhraseLoop(text: string): boolean {
+function hasPhraseLoop(text: string, lang: NovelLangCode): boolean {
+  // Indic prose repeats auxiliaries/particles constantly, so use longer n-grams and a looser limit there.
+  const n = lang === "en" ? 3 : 4;
   const tokens = text
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(Boolean);
   const trigrams = new Map<string, number>();
-  for (let index = 0; index <= tokens.length - 3; index += 1) {
-    const phrase = tokens.slice(index, index + 3).join(" ");
+  for (let index = 0; index <= tokens.length - n; index += 1) {
+    const phrase = tokens.slice(index, index + n).join(" ");
     trigrams.set(phrase, (trigrams.get(phrase) ?? 0) + 1);
   }
-  const limit = Math.max(8, Math.ceil(tokens.length / 450));
+  const limit = lang === "en" ? Math.max(8, Math.ceil(tokens.length / 450)) : Math.max(10, Math.ceil(tokens.length / 300));
   return [...trigrams.values()].some((count) => count > limit);
 }
 
@@ -74,7 +76,7 @@ export function findNovelQualityProblems(
   if ([...sentenceCounts.values()].some((count) => count >= 4)) {
     problems.push("sentences are looping");
   }
-  if (hasPhraseLoop(text)) {
+  if (hasPhraseLoop(text, lang)) {
     problems.push("a phrase pattern is repeated excessively");
   }
 
@@ -94,12 +96,14 @@ export function findNovelQualityProblems(
   }
 
   if (lang === "mr") {
-    const proseSentences = text
+    // Short replies inside dialogue are natural spoken Marathi; judge narration only.
+    const narration = text.replace(/["“”][^"“”\n]*["“”]/g, " ").replace(/^\s*[-–—].*$/gm, " ");
+    const proseSentences = narration
       .split(/[.!?।]+/u)
       .map((sentence) => sentence.trim().split(/\s+/).filter(Boolean).length)
       .filter((length) => length > 0);
     const brokenFragments = proseSentences.filter((length) => length <= 3).length;
-    if (proseSentences.length >= 12 && brokenFragments / proseSentences.length > 0.3) {
+    if (proseSentences.length >= 12 && brokenFragments / proseSentences.length > 0.45) {
       problems.push("the Marathi prose contains too many broken sentence fragments");
     }
   }
@@ -116,6 +120,17 @@ export function findNovelQualityProblems(
   if (words.length < Math.min(700, targetWords * 0.45)) problems.push("the part stops far too early");
 
   return problems;
+}
+
+/** Problems that are stylistic judgement calls; a draft with only these is still usable after retries. */
+const SOFT_PROBLEMS = new Set([
+  "a phrase pattern is repeated excessively",
+  "the Marathi prose contains too many broken sentence fragments",
+  "the part greatly exceeds its target length",
+]);
+
+export function hasOnlySoftProblems(problems: string[]): boolean {
+  return problems.every((problem) => SOFT_PROBLEMS.has(problem));
 }
 
 export function extractEpisodePlan(outline: string, episode: number): string {
