@@ -2,6 +2,7 @@ export type NovelLangCode = "en" | "hi" | "mr";
 
 const DEVANAGARI = /[\u0900-\u097f]/g;
 const LATIN = /[A-Za-z]/g;
+const FOREIGN_SCRIPT = /[\u0590-\u08ff\u0980-\u0dff\u1100-\u11ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0400-\u052f]/u;
 
 export function cleanNovelText(raw: string): string {
   return raw
@@ -84,8 +85,22 @@ export function findNovelQualityProblems(
   if (lang !== "en") {
     const devanagariCount = text.match(DEVANAGARI)?.length ?? 0;
     const latinCount = text.match(LATIN)?.length ?? 0;
+    if (FOREIGN_SCRIPT.test(text)) {
+      problems.push("characters from a foreign script are embedded in the prose");
+    }
     if (devanagariCount < 200 || latinCount > devanagariCount * 0.18) {
       problems.push("too much text is outside Devanagari script");
+    }
+  }
+
+  if (lang === "mr") {
+    const proseSentences = text
+      .split(/[.!?।]+/u)
+      .map((sentence) => sentence.trim().split(/\s+/).filter(Boolean).length)
+      .filter((length) => length > 0);
+    const brokenFragments = proseSentences.filter((length) => length <= 3).length;
+    if (proseSentences.length >= 12 && brokenFragments / proseSentences.length > 0.3) {
+      problems.push("the Marathi prose contains too many broken sentence fragments");
     }
   }
 
