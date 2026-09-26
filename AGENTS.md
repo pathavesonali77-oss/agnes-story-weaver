@@ -14,3 +14,4 @@
 - Novel generation calls the Agnes AI API (OpenAI-compatible, `https://apihub.agnes-ai.com/v1`, model `agnes-3.0-flash`) only from `src/lib/agnes.server.ts`, so API keys never reach the browser.
 - Each language uses its own key (`AGNES_API_KEY_EN`, `AGNES_API_KEY_HI`, `AGNES_API_KEY_MR`) resolved per request; the three generation runs must stay independent so one key failing cannot stop the others.
 - Long novels are produced as one outline call plus two calls per episode, driven sequentially from the client, to stay inside serverless request limits.
+- Every generated episode part is cleaned and quality-checked server-side, with one independent retry for repetition, corruption, script, formatting, or length failures, so defective prose never enters a download.

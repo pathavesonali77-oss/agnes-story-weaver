@@ -1,11 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import {
+  cleanNovelText,
+  extractEpisodePlan,
+  findNovelQualityProblems,
+} from "./novel-quality";
+
 export type LangCode = "en" | "hi" | "mr";
 
 const LANGUAGE_RULES: Record<LangCode, string> = {
-  en: "Write the entire novel in natural, literary English.",
-  hi: "पूरी रचना शुद्ध, सहज और साहित्यिक हिन्दी (देवनागरी लिपि) में लिखो। अंग्रेज़ी वाक्य कभी मत लिखो; केवल तकनीकी नाम ज़रूरत पड़ने पर देवनागरी में लिप्यंतरित करो।",
-  mr: "संपूर्ण कादंबरी शुद्ध, ओघवत्या आणि साहित्यिक मराठीत (देवनागरी लिपी) लिही. इंग्रजी वाक्ये कधीही लिहू नकोस; आवश्यक असल्यास तांत्रिक नावे देवनागरीत लिप्यंतरित कर.",
+  en: "Write idiomatic, polished literary English. Prefer precise, varied sentences over ornamental repetition.",
+  hi: "किसी अनुवाद की तरह नहीं, एक कुशल हिन्दी उपन्यासकार की तरह स्वाभाविक, व्याकरणसम्मत और साहित्यिक हिन्दी में लिखो। केवल देवनागरी प्रयोग करो। पात्रों के नामों का एक ही सुसंगत लिप्यंतरण रखो। अंग्रेज़ी शीर्षक या वाक्य मत लिखो। कृत्रिम संयुक्त शब्द, शब्दशः अनुवाद और निरर्थक उपमाएँ मत गढ़ो।",
+  mr: "अनुवादासारखे नव्हे, तर कुशल मराठी कादंबरीकाराप्रमाणे नैसर्गिक, व्याकरणशुद्ध आणि प्रवाही मराठीत लिही. फक्त देवनागरी वापर. पात्रांच्या नावांचे एकच सुसंगत लिप्यंतर ठेव. इंग्रजी शीर्षके किंवा वाक्ये लिहू नको. हिंदीसदृश वाक्यरचना, शब्दशः भाषांतर, कृत्रिम जोडशब्द आणि निरर्थक उपमा टाळ.",
 };
 
 const LANGUAGE_LABEL: Record<LangCode, string> = { en: "English", hi: "Hindi", mr: "Marathi" };
@@ -21,9 +27,19 @@ function craftSystemPrompt(lang: LangCode): string {
     "- Secondary characters have their own wants and contradictions; antagonists have reasons, not just menace.",
     "- Braid a thematic meaning through the action (survival vs. humanity, being used vs. choosing loyalty).",
     "- Keep continuity with the recap's names, classes, factions and events; you may invent connective scenes.",
-    "- No headings, bullet points, author notes, word counts or meta commentary. Prose and dialogue only.",
+    "- Never rename, merge, gender-swap or invent relationships for characters. Preserve the recap's facts and event order.",
+    "- Every paragraph must advance action, character, tension or setting. Never loop a phrase, image, thought, sentence, exchange or event.",
+    "- Use restrained imagery. Do not stack metaphors, explain a metaphor, or repeat a thematic keyword for emphasis.",
+    "- Plain text only: never use Markdown, asterisks, underscores, hashes, bold, italics, bullet points, author notes or word-count notes.",
+    "- System notifications may be plain standalone lines, without decorative symbols or Markdown.",
   ].join("\n");
 }
+
+const HEADING_RULE: Record<LangCode, string> = {
+  en: 'Use exactly "Episode N: Title" for the episode heading.',
+  hi: 'एपिसोड का शीर्षक ठीक "एपिसोड N: शीर्षक" के रूप में लिखो।',
+  mr: 'भागाचे शीर्षक नेमके "एपिसोड N: शीर्षक" या स्वरूपात लिही.',
+};
 
 const parseInput = <T,>(input: T) => input;
 
@@ -51,7 +67,13 @@ export const generateOutline = createServerFn({ method: "POST" })
             "1. Novel title and one-line premise.",
             "2. Core theme and the protagonist's inner arc (start state -> end state).",
             "3. Cast list: name, want, wound, function in the plot.",
-            "4. An episode-by-episode outline. For each episode: number, title, the 3-5 scenes it dramatizes, the turn at its end, and which thread it advances.",
+            "4. An episode-by-episode outline using these exact machine-readable delimiters:",
+            "EPISODE 1",
+            "TITLE: ...",
+            "PART 1 SCENES: 2-3 concrete scene beats",
+            "PART 2 SCENES: 2-3 different concrete scene beats",
+            "ENDING TURN: ...",
+            "Repeat that exact block structure for every episode. Never place an episode's event in another episode.",
             `5. The final episode (${data.episodes}) must land a real emotional resolution for the inner arc but leave the outer story OPEN: a deliberate, tantalising open ending — a new threat revealed, a choice not yet made, a door opening. Never write 'The End'.`,
             "This plan is for your own use as the author. Be dense and concrete, no filler.",
           ].join("\n"),
@@ -81,14 +103,19 @@ export const generateEpisodePart = createServerFn({ method: "POST" })
     const apiKey = getApiKey(data.lang);
 
     const isFinalEpisode = data.episode === data.episodes;
+    const episodePlan = extractEpisodePlan(data.outline, data.episode);
     const instructions: string[] = [
       `You are writing Episode ${data.episode} of ${data.episodes}, part ${data.part} of 2.`,
-      `Target length for this part: about ${data.wordsPerPart} words. Write long, full scenes — do not stop early.`,
+      `Write ${Math.round(data.wordsPerPart * 0.8)}-${Math.round(data.wordsPerPart * 1.1)} words. Never exceed that range to compensate for earlier parts.`,
+      `Dramatize ONLY the PART ${data.part} SCENES in the current episode plan. Do not replay completed events or borrow scenes from another episode.`,
+      "Move forward continuously. Each physical action happens once unless the plan explicitly calls for its later repetition.",
+      "Use complete, varied paragraphs. Avoid rhetorical fragments, chained 'and' clauses, repeated sentence openings and recurring decorative imagery.",
+      "Return only finished plain-text novel prose. Do not discuss these instructions.",
     ];
 
     if (data.part === 1) {
       instructions.push(
-        `Open the episode with the line "Episode ${data.episode}: <title>" on its own, then begin the prose.`,
+        HEADING_RULE[data.lang],
         "Open in the middle of a live scene, not with exposition. Dramatize the first half of this episode's outline.",
         "End this part mid-momentum, on a beat that pulls the reader forward.",
       );
@@ -107,7 +134,7 @@ export const generateEpisodePart = createServerFn({ method: "POST" })
 
     const contextBlocks = [
       `SOURCE RECAP (canon — keep names and events consistent):\n"""\n${data.recap.slice(0, 60000)}\n"""`,
-      `YOUR STORY PLAN:\n"""\n${data.outline.slice(0, 30000)}\n"""`,
+      `CURRENT EPISODE PLAN — this is the only outline section you may dramatize now:\n"""\n${episodePlan}\n"""`,
     ];
     if (data.previousTail.trim()) {
       contextBlocks.push(
@@ -115,14 +142,32 @@ export const generateEpisodePart = createServerFn({ method: "POST" })
       );
     }
 
-    const text = await agnesChat({
-      apiKey,
-      maxTokens: 8000,
-      messages: [
-        { role: "system", content: craftSystemPrompt(data.lang) },
-        { role: "user", content: [...contextBlocks, "", ...instructions].join("\n\n") },
-      ],
-    });
+    const requestText = [...contextBlocks, "", ...instructions].join("\n\n");
+    const createDraft = (correction?: string) =>
+      agnesChat({
+        apiKey,
+        maxTokens: 8000,
+        temperature: correction ? 0.65 : 0.8,
+        messages: [
+          { role: "system", content: craftSystemPrompt(data.lang) },
+          {
+            role: "user",
+            content: correction
+              ? `${requestText}\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED because it contained: ${correction}. Rewrite the entire part from scratch. Do not copy any sentence from the rejected attempt.`
+              : requestText,
+          },
+        ],
+      });
+
+    let text = cleanNovelText(await createDraft());
+    let problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart);
+    if (problems.length) {
+      text = cleanNovelText(await createDraft(problems.join(", ")));
+      problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart);
+    }
+    if (problems.length) {
+      throw new Error(`The writing quality check rejected this part: ${problems.join(", ")}. Please retry this language.`);
+    }
 
     return { text };
   });
