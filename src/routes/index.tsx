@@ -69,8 +69,8 @@ function Index() {
 
   const [recap, setRecap] = useState("");
   const [recapName, setRecapName] = useState("");
-  const [episodes, setEpisodes] = useState(12);
-  const [wordsPerEpisode, setWordsPerEpisode] = useState(6500);
+  const [episodes, setEpisodes] = useState(30);
+  const [wordsPerEpisode, setWordsPerEpisode] = useState(4000);
   const [state, setState] = useState<Record<LangCode, LangState>>({
     en: emptyState,
     hi: emptyState,
@@ -239,8 +239,8 @@ function Index() {
             <input
               id="episodes"
               type="range"
-              min={10}
-              max={15}
+              min={5}
+              max={30}
               step={1}
               value={episodes}
               className="mt-3 w-full accent-primary"
@@ -255,8 +255,8 @@ function Index() {
             <input
               id="words"
               type="range"
-              min={5000}
-              max={8000}
+              min={3000}
+              max={5000}
               step={500}
               value={wordsPerEpisode}
               className="mt-3 w-full accent-primary"
