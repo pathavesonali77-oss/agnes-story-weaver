@@ -101,7 +101,7 @@ function Index() {
             patch(lang, {
               step: `Writing episode ${episode} of ${total} (part ${part})`,
             });
-            const previousTail = collected.join("\n\n");
+            const previousTail = collected.at(-1)?.slice(-6000) ?? "";
             const { text } = await episodeFn({
               data: {
                 lang,
@@ -147,7 +147,8 @@ function Index() {
   const fullText = useCallback(
     (lang: LangCode) => {
       const s = state[lang];
-      const header = LANGS.find((l) => l.code === lang)!;
+      const header = LANGS.find((language) => language.code === lang);
+      if (!header) return "";
       return [
         `${recapName || "Novel"} — ${header.name} edition`,
         `Written from the uploaded recap with Agnes 3.0 Flash.`,
@@ -330,7 +331,7 @@ function Index() {
 
               {s.episodes.length > 0 && (
                 <div className="mt-4 max-h-44 overflow-y-auto rounded-md border border-border bg-background/50 p-3 text-xs leading-relaxed text-muted-foreground">
-                  {s.episodes[s.episodes.length - 1]!.slice(-700)}
+                  {s.episodes.at(-1)?.slice(-700)}
                 </div>
               )}
 
