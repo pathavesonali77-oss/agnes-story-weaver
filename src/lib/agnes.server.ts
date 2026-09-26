@@ -41,6 +41,30 @@ export async function agnesChat(opts: {
   maxTokens?: number;
   temperature?: number;
 }): Promise<string> {
+  const baseTokens = opts.maxTokens ?? 8000;
+  let lastReason = "";
+  // Empty replies happen when reasoning consumes the token budget or on transient upstream hiccups.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const content = await agnesChatOnce({
+      ...opts,
+      maxTokens: Math.min(baseTokens + attempt * 4000, 16000),
+      onEmpty: (reason) => (lastReason = reason),
+    });
+    if (content) return content;
+    await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+  }
+  throw new Error(
+    `Agnes returned an empty response after 3 attempts${lastReason ? ` (${lastReason})` : ""}. Please resume this language.`,
+  );
+}
+
+async function agnesChatOnce(opts: {
+  apiKey: string;
+  messages: AgnesMessage[];
+  maxTokens: number;
+  temperature?: number;
+  onEmpty: (reason: string) => void;
+}): Promise<string> {
   const response = await fetch(`${AGNES_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
@@ -52,7 +76,7 @@ export async function agnesChat(opts: {
       messages: opts.messages,
       temperature: opts.temperature ?? 1.0,
       top_p: 0.95,
-      max_tokens: opts.maxTokens ?? 8000,
+      max_tokens: opts.maxTokens,
       reasoning_effort: "low",
     }),
   });
@@ -68,13 +92,18 @@ export async function agnesChat(opts: {
     if (response.status === 402) {
       throw new Error("This Agnes key has no remaining credits.");
     }
+    if (response.status >= 500) {
+      opts.onEmpty(`server error ${response.status}`);
+      return "";
+    }
     throw new Error(`Agnes request failed (${response.status}): ${body.slice(0, 300)}`);
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string | null } }>;
-  };
-  const content = stripThinking(data.choices?.[0]?.message?.content ?? "");
-  if (!content) throw new Error("Agnes returned an empty response.");
+  const data = (await response.json().catch(() => null)) as {
+    choices?: Array<{ finish_reason?: string; message?: { content?: string | null } }>;
+  } | null;
+  const choice = data?.choices?.[0];
+  const content = stripThinking(choice?.message?.content ?? "");
+  if (!content) opts.onEmpty(choice?.finish_reason ? `finish_reason=${choice.finish_reason}` : "no content");
   return content;
 }
