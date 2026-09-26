@@ -30,6 +30,7 @@ export function findNovelQualityProblems(
   text: string,
   lang: NovelLangCode,
   targetWords: number,
+  allowEpisodeHeading: boolean,
 ): string[] {
   const problems: string[] = [];
   const words = text.trim().split(/\s+/).filter(Boolean);
@@ -70,8 +71,12 @@ export function findNovelQualityProblems(
     }
   }
 
-  if (/^(?:Episode|एपिसोड)\s*[०-९0-9]+/gim.test(text) && !/^\s*(?:Episode|एपिसोड)\s*[०-९0-9]+/i.test(text)) {
+  const episodeHeadings = text.match(/^(?:Episode|एपिसोड)\s*[०-९0-9]+[^\n]*$/gim) ?? [];
+  if (episodeHeadings.length > (allowEpisodeHeading ? 1 : 0)) {
     problems.push("an extra episode begins inside this part");
+  }
+  if (allowEpisodeHeading && episodeHeadings.length !== 1) {
+    problems.push("the required episode heading is missing");
   }
 
   if (words.length > targetWords * 1.35) problems.push("the part greatly exceeds its target length");

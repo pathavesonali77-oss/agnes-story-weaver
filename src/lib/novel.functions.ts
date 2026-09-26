@@ -160,10 +160,10 @@ export const generateEpisodePart = createServerFn({ method: "POST" })
       });
 
     let text = cleanNovelText(await createDraft());
-    let problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart);
+    let problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart, data.part === 1);
     if (problems.length) {
       text = cleanNovelText(await createDraft(problems.join(", ")));
-      problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart);
+      problems = findNovelQualityProblems(text, data.lang, data.wordsPerPart, data.part === 1);
     }
     if (problems.length) {
       throw new Error(`The writing quality check rejected this part: ${problems.join(", ")}. Please retry this language.`);
