@@ -102,7 +102,7 @@ function Index() {
               step: `Writing episode ${episode} of ${total} (part ${part})`,
             });
             const previousTail = collected.at(-1)?.slice(-6000) ?? "";
-            const { text } = await episodeFn({
+            const request = {
               data: {
                 lang,
                 recap: source,
@@ -113,7 +113,18 @@ function Index() {
                 wordsPerPart: Math.round(words / 2),
                 previousTail,
               },
-            });
+            };
+            let text: string;
+            try {
+              ({ text } = await episodeFn(request));
+            } catch (firstError) {
+              // One client-side retry for transient failures (e.g. empty replies) before stopping this language.
+              const message = firstError instanceof Error ? firstError.message : "";
+              if (/unauthorized|credits|Missing API key/i.test(message) || cancelled.current) throw firstError;
+              patch(lang, { step: `Retrying episode ${episode} (part ${part})` });
+              await new Promise((r) => setTimeout(r, 3000));
+              ({ text } = await episodeFn(request));
+            }
             collected.push(text.trim());
             patch(lang, {
               episodes: [...collected],
