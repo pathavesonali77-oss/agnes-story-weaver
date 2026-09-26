@@ -110,6 +110,8 @@ export const generateEpisodePart = createServerFn({ method: "POST" })
       `Dramatize ONLY the PART ${data.part} SCENES in the current episode plan. Do not replay completed events or borrow scenes from another episode.`,
       "Move forward continuously. Each physical action happens once unless the plan explicitly calls for its later repetition.",
       "Use complete, varied paragraphs. Avoid rhetorical fragments, chained 'and' clauses, repeated sentence openings and recurring decorative imagery.",
+      "Never build circular chains such as 'X was the Y, and the Y was the Z.' Never repeat a sentence template, thematic keyword or striking metaphor to fill space.",
+      "If planned material runs short, deepen the scene through purposeful action, dialogue, decisions and consequences—never restatement.",
       "Return only finished plain-text novel prose. Do not discuss these instructions.",
     ];
 

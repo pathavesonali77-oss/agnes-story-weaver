@@ -26,6 +26,21 @@ function normalizedParagraphs(text: string): string[] {
     .filter((paragraph) => paragraph.length >= 35);
 }
 
+function hasPhraseLoop(text: string): boolean {
+  const tokens = text
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const trigrams = new Map<string, number>();
+  for (let index = 0; index <= tokens.length - 3; index += 1) {
+    const phrase = tokens.slice(index, index + 3).join(" ");
+    trigrams.set(phrase, (trigrams.get(phrase) ?? 0) + 1);
+  }
+  const limit = Math.max(8, Math.ceil(tokens.length / 450));
+  return [...trigrams.values()].some((count) => count > limit);
+}
+
 export function findNovelQualityProblems(
   text: string,
   lang: NovelLangCode,
@@ -57,6 +72,9 @@ export function findNovelQualityProblems(
   }
   if ([...sentenceCounts.values()].some((count) => count >= 4)) {
     problems.push("sentences are looping");
+  }
+  if (hasPhraseLoop(text)) {
+    problems.push("a phrase pattern is repeated excessively");
   }
 
   if (/\*\*|__|(?<!\*)\*[^*\n]+\*(?!\*)/.test(text)) {
